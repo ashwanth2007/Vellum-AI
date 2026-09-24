@@ -20,7 +20,7 @@ import torch.nn.functional as F
 import numpy as np
 from PIL import Image
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional, Union
+from typing import Dict, Any, List, Tuple, Optional, Union
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 if str(BASE_DIR) not in sys.path:

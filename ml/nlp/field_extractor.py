@@ -33,10 +33,10 @@ CERT_NO_RX = re.compile(r"(?:Certificate\s*(?:No\.?|Number|ID)|Cert\.?\s*No\.?|S
                         r"Diploma\s*No\.?|Ref(?:erence)?\s*(?:No\.?)?)\s*[:\-\.]?\s*([A-Z0-9][A-Z0-9/\-]{3,})", re.I)
 CGPA_RX = re.compile(r"\bC\.?\s*G\.?\s*P\.?\s*A\.?[^0-9]{0,40}?(\d{1,2}\.\d{1,2})", re.I)
 GPA_RX = re.compile(r"\b(?:S\.?G\.?P\.?A|G\.?P\.?A)\b[^0-9]{0,10}(\d{1,2}\.\d{1,2})", re.I)
-PERCENT_RX = re.compile(r"(?:Percentage|score\s+of|scored)?[^0-9]{0,15}?(\d{1,3}(?:\.\d{1,2})?)\s*%", re.I)
+PERCENT_RX = re.compile(r"(?:Percentage|score\s*of|scored|aggregate)[^0-9]{0,15}?(\d{1,3}(?:\.\d{1,2})?)\s*%", re.I)
 SEM_RX = re.compile(r"\b(?:Semester|Sem)\s*[:\-]?\s*((?:Fall|Winter|Summer)?\s*(?:Semester)?\s*[IVX0-9]+(?:\s*[-/]\s*\d{2,4})?)", re.I)
 SEM_NAMED_RX = re.compile(r"\b((?:Fall|Winter|Summer)\s+Semester\s+\d{4}\s*-\s*\d{2,4})", re.I)
-EXAM_RX = re.compile(r"Month\s*(?:&|and)\s*Year\s*of\s*(?:Examination|Exam)\s*[:\-]?\s*([A-Za-z]+\s+\d{4})", re.I)
+EXAM_RX = re.compile(r"Month\s*(?:&|and)\s*Year\s*of\s*(?:Examination|Exam)\s*[:\-]?\s*([A-Za-z]+\s*\d{4})", re.I)
 DEGREE_RX = re.compile(r"((?:Bachelor|Master|Doctor)\s+of\s+[A-Za-z]+(?:\s+(?:in|of|and|&)\s+[A-Za-z &]+)?|"
                        r"\b(?:B\.?\s?Tech|M\.?\s?Tech|B\.?\s?E\.|B\.?\s?Sc|M\.?\s?Sc|MBA|MCA|BCA|B\.?\s?Com|Ph\.?\s?D)\b[^,\n]{0,60})")
 ROLE_RX = re.compile(r"\b(Registrar|Vice[\s-]*Chancellor|Controller\s+of\s+Examinations|Dean(?:\s*[-:]?\s*Academics)?|"
@@ -44,10 +44,19 @@ ROLE_RX = re.compile(r"\b(Registrar|Vice[\s-]*Chancellor|Controller\s+of\s+Exami
                      r"Chief\s+Executive\s+Officer|Professor)\b", re.I)
 COURSE_CODE_RX = re.compile(r"^[A-Z]{2,5}\s?\d{3,4}[A-Z]?$")
 GRADE_RX = re.compile(r"^(?:O|S|A\+|A|B\+|B|C\+|C|D|E|F|P|U|AB|N)$")
-INTRO_RX = re.compile(r"(certify\s+that(?:\s+(?:Mr|Ms|Mrs)\.?(?:/\s*Ms\.?)?)?|presented\s+to|awarded\s+to|conferred\s+(?:up)?on|"
-                      r"hereby\s+certify\s+that|recommend(?:ation)?\s+(?:for\s+)?)\s*[:,]?\s*(.*)$", re.I)
+INTRO_RX = re.compile(r"(certify\s+that(?:\s+(?:Mr|Ms|Mrs)\.?(?:/\s*Ms\.?)?)?|presented\s+to|awarded\s+to|conferred\s*(?:up)?on|"
+                      r"hereby\s+certify\s+that|recommendation\s+for|recommend\s+)\s*[:,]?\s*(.*)$", re.I)
 STOP_NAME = {"this", "the", "has", "certificate", "university", "institute", "college", "certify", "date", "degree",
-             "grade", "sheet", "name", "register", "number", "programme", "semester", "course", "total", "of"}
+             "grade", "sheet", "name", "register", "number", "programme", "semester", "course", "total", "of",
+             "school", "graduate", "faculty", "trustees", "board", "committee", "department", "recommendation", "the"}
+
+
+def unglue(s: str) -> str:
+    """OCR drops spaces on small text: 'NameoftheStudent:PriyaVerma' -> 'Nameofthe Student: Priya Verma'."""
+    s = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", s)
+    s = re.sub(r"(?<=[a-z])(?=\d)", " ", s)
+    s = re.sub(r"(?<=[:,])(?=\S)", " ", s)
+    return s
 
 
 def _clean(s: str) -> str:
@@ -85,7 +94,7 @@ def group_rows(lines: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
 class FieldExtractor:
     def extract(self, lines: List[Dict[str, Any]], doc_type: str) -> Dict[str, Any]:
         rows = group_rows(lines)
-        row_texts = [(" ".join(c["text"] for c in r), min(c["confidence"] for c in r)) for r in rows]
+        row_texts = [(unglue(" ".join(c["text"] for c in r)), min(c["confidence"] for c in r)) for r in rows]
         text = "\n".join(t for t, _ in row_texts)
         found: Dict[str, Tuple[str, float]] = {}
 
@@ -215,6 +224,7 @@ class FieldExtractor:
         out = []
         for r in rows:
             cells = [c["text"].strip() for c in r if c["text"].strip()]
+            cells = [c if COURSE_CODE_RX.match(c.replace(" ", "")) else unglue(c) for c in cells]
             if len(cells) < 3:
                 continue
             code_i = next((i for i, c in enumerate(cells) if COURSE_CODE_RX.match(c.replace(" ", ""))), None)
