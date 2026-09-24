@@ -9,6 +9,14 @@ interface AnalysisResultPageProps {
   onAnalyzeAnother: () => void;
 }
 
+const TIMING_LABELS: Record<string, string> = {
+  decode: 'File decoding',
+  ocr: 'OCR',
+  classification: 'Classification (3 models)',
+  field_extraction: 'Field extraction',
+  total: 'Total',
+};
+
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
 const ProbBars: React.FC<{ title: string; probs: Record<DocClass, number> | null; winner?: DocClass; note?: string }> = ({ title, probs, winner, note }) => (
@@ -89,6 +97,7 @@ export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, 
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {/* Document preview with OCR boxes */}
+        <div className="space-y-6 min-w-0">
         <div className="depth-card-static rounded-3xl p-5 space-y-3 min-w-0">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-zinc-900 flex items-center gap-1.5"><FileText className="h-4 w-4" /> Document</span>
@@ -122,6 +131,28 @@ export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, 
               ))}
             </div>
           )}
+        </div>
+        <div className="depth-card-static rounded-3xl p-5 space-y-3 min-w-0">
+          <button type="button" onClick={() => setShowText((s) => !s)}
+            className="w-full flex items-center justify-between text-xs font-semibold text-zinc-900 cursor-pointer">
+            <span className="flex items-center gap-1.5"><ScanText className="h-4 w-4" /> OCR text ({result.ocr.word_count} words, {result.ocr.engine})</span>
+            <span className="text-zinc-500 font-normal">{showText ? 'Hide' : 'Show'}</span>
+          </button>
+          {showText && (
+            <pre className="text-[11px] leading-relaxed text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-xl p-3 max-h-72 overflow-auto whitespace-pre-wrap">
+              {result.ocr.text || '(no text found)'}
+            </pre>
+          )}
+        </div>
+        <div className="depth-card-static rounded-3xl p-5 space-y-2">
+          <span className="text-xs font-semibold text-zinc-900 flex items-center gap-1.5"><Clock className="h-4 w-4" /> Pipeline timing</span>
+          {Object.entries(result.timings_ms).map(([k, v]) => (
+            <div key={k} className="flex justify-between text-xs border-b border-zinc-100 last:border-0 py-1">
+              <span className="text-zinc-500">{TIMING_LABELS[k] || k}</span>
+              <span className="font-mono text-zinc-900">{v} ms</span>
+            </div>
+          ))}
+        </div>
         </div>
 
         <div className="space-y-6 min-w-0">
@@ -191,29 +222,6 @@ export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, 
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-        <div className="depth-card-static rounded-3xl p-5 space-y-3 min-w-0">
-          <button type="button" onClick={() => setShowText((s) => !s)}
-            className="w-full flex items-center justify-between text-xs font-semibold text-zinc-900 cursor-pointer">
-            <span className="flex items-center gap-1.5"><ScanText className="h-4 w-4" /> OCR text ({result.ocr.word_count} words, {result.ocr.engine})</span>
-            <span className="text-zinc-500 font-normal">{showText ? 'Hide' : 'Show'}</span>
-          </button>
-          {showText && (
-            <pre className="text-[11px] leading-relaxed text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-xl p-3 max-h-72 overflow-auto whitespace-pre-wrap">
-              {result.ocr.text || '(no text found)'}
-            </pre>
-          )}
-        </div>
-        <div className="depth-card-static rounded-3xl p-5 space-y-2">
-          <span className="text-xs font-semibold text-zinc-900 flex items-center gap-1.5"><Clock className="h-4 w-4" /> Pipeline timing</span>
-          {Object.entries(result.timings_ms).map(([k, v]) => (
-            <div key={k} className="flex justify-between text-xs border-b border-zinc-100 last:border-0 py-1">
-              <span className="text-zinc-500 capitalize">{k.replace('_', ' ')}</span>
-              <span className="font-mono text-zinc-900">{v} ms</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };

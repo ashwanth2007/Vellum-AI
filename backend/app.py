@@ -227,14 +227,17 @@ def list_samples():
     """Files in demo_samples/, offered as one-click samples on the upload page."""
     if not DEMO_DIR.exists():
         return []
-    return [{"name": p.name, "size": p.stat().st_size} for p in sorted(DEMO_DIR.iterdir()) if p.is_file() and not p.name.startswith(".")]
+    files = [p for p in sorted(DEMO_DIR.iterdir()) if p.is_file()]
+    files += [p for d in sorted(DEMO_DIR.iterdir()) if d.is_dir() for p in sorted(d.iterdir())
+              if p.is_file() and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".pdf")]
+    return [{"name": p.relative_to(DEMO_DIR).as_posix(), "size": p.stat().st_size} for p in files if not p.name.startswith(".")]
 
 
-@app.get("/api/samples/{name}")
+@app.get("/api/samples/{name:path}")
 def get_sample(name: str):
     from fastapi.responses import FileResponse
     p = (DEMO_DIR / name).resolve()
-    if p.parent != DEMO_DIR.resolve() or not p.is_file():  # no path traversal
+    if DEMO_DIR.resolve() not in p.parents or not p.is_file():  # no path traversal
         raise HTTPException(status_code=404, detail="Sample not found.")
     return FileResponse(p, filename=p.name)
 

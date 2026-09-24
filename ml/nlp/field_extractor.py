@@ -233,6 +233,10 @@ class FieldExtractor:
                 title = next((c for c in rest if re.search(r"[A-Za-z]{3,}", c) and not GRADE_RX.match(c)), "")
                 credits = next((c for c in rest if re.fullmatch(r"\d(?:\.\d)?", c)), "")
                 grade = next((c for c in rest if GRADE_RX.match(c)), "")
+                if not grade and credits:
+                    after = rest[rest.index(credits) + 1:] if credits in rest else []
+                    if after and after[0] == "0":  # OCR reads the letter grade O as the digit 0
+                        grade = "O"
                 out.append({"code": cells[code_i], "title": title, "credits": credits, "grade": grade})
                 continue
             nums = [c for c in cells if re.fullmatch(r"\d{1,3}", c)]

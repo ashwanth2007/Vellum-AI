@@ -105,7 +105,7 @@ export const DocumentUploadPage: React.FC<DocumentUploadPageProps> = ({ onStartP
                     type="button"
                     onClick={async () => pick(await fetchSample(s.name))}
                     className={`px-3 py-1.5 rounded-xl text-[11px] font-mono transition-colors duration-150 cursor-pointer border ${
-                      file?.name === s.name ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-zinc-50/80 text-zinc-700 border-zinc-200 hover:bg-white'
+                      file?.name === s.name.split('/').pop() ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-zinc-50/80 text-zinc-700 border-zinc-200 hover:bg-white'
                     }`}
                   >
                     {s.name}

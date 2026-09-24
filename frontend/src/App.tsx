@@ -58,9 +58,11 @@ export function App() {
       const res = await analyzeFile(file);
       setAnalysis(res);
       setRunStatus('done');
+      return true;
     } catch (e: any) {
       setRunError(e?.message || 'Analysis failed.');
       setRunStatus('error');
+      return false;
     }
   };
 
@@ -70,8 +72,7 @@ export function App() {
     if (!name) return;
     fetchSample(name)
       .then(async (f) => {
-        await handleStartProcessing(f);
-        setCurrentScreen('result');
+        if (await handleStartProcessing(f)) setCurrentScreen('result');
       })
       .catch((e) => { setRunFile(name); setRunError(e.message); setRunStatus('error'); setCurrentScreen('processing'); });
   }, []);

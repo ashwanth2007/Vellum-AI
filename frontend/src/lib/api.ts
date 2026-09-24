@@ -103,8 +103,8 @@ export async function listSamples(): Promise<SampleFile[]> {
 }
 
 export async function fetchSample(name: string): Promise<File> {
-  const r = await fetch(`/api/samples/${encodeURIComponent(name)}`);
+  const r = await fetch(`/api/samples/${name.split('/').map(encodeURIComponent).join('/')}`);
   if (!r.ok) throw new Error(`Sample ${name} not found`);
   const blob = await r.blob();
-  return new File([blob], name, { type: blob.type });
+  return new File([blob], name.split('/').pop() as string, { type: blob.type });
 }

@@ -55,12 +55,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   }, [fontPreset]);
 
   const navItems = [
+    { id: 'upload', label: 'Intake', icon: UploadCloud },
+    { id: 'result', label: 'Result', icon: FileSearch },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'workspace', label: 'Verification Workspace', icon: Shield, badge: 'Live' },
-    { id: 'upload', label: 'Document Intake', icon: UploadCloud },
-    { id: 'result', label: 'Analysis Result', icon: FileSearch },
-    { id: 'history', label: 'History & Ledger', icon: History },
-    { id: 'audit', label: 'Audit Trail', icon: Lock },
+    { id: 'workspace', label: 'Workspace', icon: Shield, badge: 'Live' },
+    { id: 'history', label: 'History', icon: History },
+    { id: 'audit', label: 'Audit', icon: Lock },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Sliders },
   ];

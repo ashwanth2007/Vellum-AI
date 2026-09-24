@@ -1,4 +1,4 @@
-﻿# 🛡️ Vellum &mdash; Multi-Modal AI Document Verification Platform
+# 🛡️ Vellum &mdash; Multi-Modal AI Document Verification Platform
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-DirectML-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
@@ -9,6 +9,51 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
 > **Vellum** is an enterprise-grade, multi-modal AI platform for academic credential verification, document forgery detection, and cross-document forensic intelligence. Inspired by luxury editorial interfaces ([Clarvos](https://www.clarvos.com/)), Vellum bridges deep neural inspection with a tactile, human-centered review workspace.
+
+---
+
+## Working Prototype (AI course demo)
+
+**What it does:** upload any image or PDF. The model decides which of 4 classes it is, and for relevant documents it reads the fields out.
+
+| Class | Meaning | Result |
+|---|---|---|
+| Certificate | degree, course completion, internship, participation | Relevant, fields extracted |
+| Academic record | grade sheet, CGPA, transcript, completion or bonafide letter, LOR | Relevant, fields + course table extracted |
+| Unrelated document | invoice, form, memo, article | Rejected |
+| Not a document | random photo | Rejected |
+
+**How it classifies:** three models fused by a weighted average of their probabilities.
+1. EfficientNet-B0, ImageNet-pretrained, fine-tuned on our dataset (`ml/document_classifier/train.py`)
+2. CLIP ViT-B/32 zero-shot (`ml/document_classifier/clip_branch.py`), covers real-world scans
+3. TF-IDF + logistic regression on the RapidOCR text (`ml/document_classifier/text_model.py`)
+
+**Measured results** (`python -m ml.document_classifier.evaluate`, numbers in `models/document_classifier_metrics.json`):
+- Fused: 100% on the 448-image held-out test split, 6/6 on genuine real-world diplomas and records
+- Image CNN alone: 100% test, 1/6 real-world. CLIP alone: 87.1% test, 6/6 real-world. Text alone: 96.7% test
+
+### Run the demo (Windows)
+
+```powershell
+# one-time setup
+uv venv .venv --python 3.12            # or: python -m venv .venv
+.venv\Scripts\python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+.venv\Scripts\python -m pip install -r backend/requirements.txt transformers
+.venv\Scripts\python scripts/download_models.py   # CLIP weights, 605 MB
+cd frontend; npm install; cd ..
+
+# every time
+powershell -ExecutionPolicy Bypass -File start_demo.ps1   # starts API :8000 + UI :5173, opens the browser
+powershell -ExecutionPolicy Bypass -File stop_demo.ps1
+```
+
+Test files for the live demo are in `demo_samples/` (one click each on the upload page). `demo_samples/real_world/` holds genuine scans from Wikimedia Commons that the model never trained on.
+
+**Rebuild everything from scratch:** `python scripts/build_classifier_dataset.py`, `python -m ml.document_classifier.train`, `python -m ml.document_classifier.text_model ocr 150 0 1`, `python -m ml.document_classifier.text_model train`, `python -m ml.document_classifier.evaluate`.
+
+**Tests:** `.venv\Scripts\python -m pytest tests/test_analyze.py -q` (17 tests: every class, PDF, field values, rejection, path traversal).
+
+**Slides:** `presentation/Vellum-AI-Prototype.pptx`, rebuilt by `python presentation/build_deck.py`.
 
 ---
 

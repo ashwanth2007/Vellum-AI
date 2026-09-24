@@ -228,7 +228,7 @@ for i, (n, v) in enumerate(split):
 
 # 7. Results ---------------------------------------------------------------------------------
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
-title(s, "Results", "Measured on data the model never trained on")
+title(s, "Results", "Measured on held-out data. The real-world set is only 6 scans and the fusion weights were tuned on these sets, so treat it as a sanity check.")
 card(s, Inches(0.6), Inches(1.95), Inches(3.6), Inches(2.3))
 text(s, Inches(0.9), Inches(2.1), Inches(3.1), Inches(1.1), pct(m["fused_test_accuracy"]), size=54, bold=True, font=HEAD, color=GREEN)
 text(s, Inches(0.9), Inches(3.3), Inches(3.1), Inches(0.8), f"Test split accuracy, {m['test_samples']} images", size=15, color=MUTED)
@@ -250,7 +250,7 @@ shots = [
     ("reject", "Unsupported file", "Anything that is not an image or a PDF gets a clear error instead of a crash"),
 ]
 for key, t, sub in shots:
-    p = SHOTS / f"{key}.png"
+    p = SHOTS / f"crop_{key}.png"
     if not p.exists():
         continue
     s = prs.slides.add_slide(BLANK); bg(s, PAPER)
@@ -258,11 +258,31 @@ for key, t, sub in shots:
     picture(s, p, Inches(0.6), Inches(1.8), Inches(12.1), Inches(5.4))
 
 # upload flow slide
-if (SHOTS / "upload.png").exists():
+if (SHOTS / "crop_upload.png").exists():
     s = prs.slides.add_slide(BLANK); bg(s, PAPER)
     title(s, "Step 1: Upload", "Drag in any image or PDF, or pick a file from the demo_samples folder")
-    picture(s, SHOTS / "upload.png", Inches(0.6), Inches(1.8), Inches(12.1), Inches(5.4))
+    picture(s, SHOTS / "crop_upload.png", Inches(0.6), Inches(1.8), Inches(12.1), Inches(5.4))
     prs.slides._sldIdLst.insert(7, prs.slides._sldIdLst[-1])
+
+# Live demo test files -------------------------------------------------------------------
+s = prs.slides.add_slide(BLANK); bg(s, PAPER)
+title(s, "Live demo: test files", "All in demo_samples/, one click each on the upload page")
+demo = [
+    ("01_certificate_course_completion.png", "Certificate", GREEN),
+    ("02_certificate_degree.pdf", "Certificate (PDF)", GREEN),
+    ("03_grade_sheet_phone_photo.jpg", "Academic record", GREEN),
+    ("04_transcript_two_pages.pdf", "Academic record (2 pages)", GREEN),
+    ("05_other_invoice.png", "Unrelated document", SEAL),
+    ("06_other_scanned_form.jpg", "Unrelated document", SEAL),
+    ("07 / 08_random_photo.jpg", "Not a document", SEAL),
+    ("09_not_supported.txt", "Rejected: unsupported file", SEAL),
+    ("real_world/ (6 real scans)", "Certificate / Academic record", GREEN),
+]
+for i, (f, r, c) in enumerate(demo):
+    y = Inches(1.9) + i * Inches(0.57)
+    card(s, Inches(0.6), y, Inches(12.1), Inches(0.5), fill=PARCH if i % 2 == 0 else PAPER)
+    text(s, Inches(0.85), y, Inches(7.0), Inches(0.5), f, size=15, anchor=MSO_ANCHOR.MIDDLE)
+    text(s, Inches(8.2), y, Inches(4.3), Inches(0.5), r, size=15, bold=True, color=c, anchor=MSO_ANCHOR.MIDDLE)
 
 # Closing ---------------------------------------------------------------------------------
 s = prs.slides.add_slide(BLANK); bg(s, INK)
