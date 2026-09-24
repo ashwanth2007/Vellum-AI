@@ -18,8 +18,9 @@ export interface Classification {
   confidence: number;
   class_probabilities: Record<DocClass, number>;
   image_probabilities: Record<DocClass, number>;
+  clip_probabilities: Record<DocClass, number> | null;
   text_probabilities: Record<DocClass, number> | null;
-  fusion_mode: 'image' | 'image+text';
+  fusion_mode: string;
 }
 
 export interface ExtractedField {

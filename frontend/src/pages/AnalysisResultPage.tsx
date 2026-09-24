@@ -129,11 +129,12 @@ export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, 
           <div className="depth-card-static rounded-3xl p-5 space-y-5">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
               <span className="text-xs font-semibold text-zinc-900">Classification</span>
-              <Badge variant="neural" size="sm">{cls.fusion_mode === 'image+text' ? 'Image + text fused' : 'Image model only'}</Badge>
+              <Badge variant="neural" size="sm">{cls.fusion_mode.split('+').length} models fused</Badge>
             </div>
             <ProbBars title="Final (fused)" probs={cls.class_probabilities} winner={cls.document_type} />
-            <ProbBars title="Image model" probs={cls.image_probabilities} winner={cls.document_type} note="EfficientNet-B0" />
-            <ProbBars title="Text model" probs={cls.text_probabilities} winner={cls.document_type} note="OCR + TF-IDF" />
+            <ProbBars title="Image model (fine-tuned)" probs={cls.image_probabilities} winner={cls.document_type} note="EfficientNet-B0" />
+            <ProbBars title="Vision-language model (zero-shot)" probs={cls.clip_probabilities} winner={cls.document_type} note="CLIP ViT-B/32" />
+            <ProbBars title="Text model (OCR)" probs={cls.text_probabilities} winner={cls.document_type} note="TF-IDF + LogReg" />
           </div>
 
           {/* Extracted fields */}

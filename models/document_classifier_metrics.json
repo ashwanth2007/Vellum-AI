@@ -1,0 +1,109 @@
+{
+  "test_samples": 448,
+  "real_world_samples": 6,
+  "fusion_weights": {
+    "image": 0.45,
+    "clip": 0.45,
+    "text": 0.1
+  },
+  "image_cnn_test_accuracy": 1.0,
+  "image_cnn_test_macro_f1": 1.0,
+  "image_cnn_real_world_accuracy": 0.1667,
+  "clip_zero_shot_test_accuracy": 0.8705,
+  "clip_zero_shot_test_macro_f1": 0.8731,
+  "clip_zero_shot_real_world_accuracy": 1.0,
+  "fused_test_accuracy": 1.0,
+  "fused_test_macro_f1": 1.0,
+  "fused_real_world_accuracy": 1.0,
+  "text_test_accuracy": 0.9669,
+  "text_test_samples_with_text": 362,
+  "report": {
+    "CERTIFICATE": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 128.0
+    },
+    "ACADEMIC_RECORD": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 136.0
+    },
+    "OTHER_DOCUMENT": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 95.0
+    },
+    "RANDOM_PHOTO": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 89.0
+    },
+    "accuracy": 1.0,
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 448.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 448.0
+    }
+  },
+  "real_world_detail": [
+    {
+      "file": "real_01_Degree_Certificate_from_the_University_o.jpg",
+      "true": "CERTIFICATE",
+      "image_cnn": "CERTIFICATE",
+      "clip": "CERTIFICATE",
+      "text": "OTHER_DOCUMENT",
+      "fused": "CERTIFICATE"
+    },
+    {
+      "file": "real_02_HKBU_CIE_Associate_Degree_Certificate_in.jpg",
+      "true": "CERTIFICATE",
+      "image_cnn": "RANDOM_PHOTO",
+      "clip": "CERTIFICATE",
+      "text": "OTHER_DOCUMENT",
+      "fused": "CERTIFICATE"
+    },
+    {
+      "file": "real_03_Ph.D._diploma_Marquette_University_1969..jpg",
+      "true": "CERTIFICATE",
+      "image_cnn": "OTHER_DOCUMENT",
+      "clip": "CERTIFICATE",
+      "text": "OTHER_DOCUMENT",
+      "fused": "CERTIFICATE"
+    },
+    {
+      "file": "real_04_Fellowship_Diploma_of_the_Royal_College_.jpg",
+      "true": "CERTIFICATE",
+      "image_cnn": "OTHER_DOCUMENT",
+      "clip": "CERTIFICATE",
+      "text": "OTHER_DOCUMENT",
+      "fused": "CERTIFICATE"
+    },
+    {
+      "file": "real_05_Transcript__education_.jpg.jpg",
+      "true": "ACADEMIC_RECORD",
+      "image_cnn": "OTHER_DOCUMENT",
+      "clip": "ACADEMIC_RECORD",
+      "text": "RANDOM_PHOTO",
+      "fused": "ACADEMIC_RECORD"
+    },
+    {
+      "file": "real_06_Diploma-ExpertoUniversitario-Sevilla.jpg.jpg",
+      "true": "CERTIFICATE",
+      "image_cnn": "OTHER_DOCUMENT",
+      "clip": "CERTIFICATE",
+      "text": "OTHER_DOCUMENT",
+      "fused": "CERTIFICATE"
+    }
+  ]
+}

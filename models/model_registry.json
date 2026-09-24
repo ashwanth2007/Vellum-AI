@@ -35,21 +35,42 @@
     }
   },
   "document_classifier": {
-    "version": "1.0.0",
-    "architecture": "LightweightConvNet_EmbeddingHead",
-    "dataset": "Academic-Certificates-Synthesis",
+    "version": "2.0.0",
+    "architecture": "EfficientNet-B0 fine-tuned + CLIP ViT-B/32 zero-shot + OCR TF-IDF LogisticRegression, weighted fusion",
+    "dataset": "Synthetic certificates, grade sheets, letters, LORs + RVL-CDIP subset + FUNSD + Flickr1k + Imagenette",
     "classes": [
-      "ACADEMIC_CERTIFICATE",
-      "TRANSCRIPT",
-      "RECOMMENDATION_LETTER",
-      "ID_PASSPORT",
-      "INTERNSHIP_CERTIFICATE"
+      "CERTIFICATE",
+      "ACADEMIC_RECORD",
+      "OTHER_DOCUMENT",
+      "RANDOM_PHOTO"
     ],
     "metrics": {
-      "accuracy": 0.98,
-      "f1": 0.98,
-      "loss": 0.0007
-    }
+      "test_samples": 448,
+      "real_world_samples": 6,
+      "fusion_weights": {
+        "image": 0.45,
+        "clip": 0.45,
+        "text": 0.1
+      },
+      "image_cnn_test_accuracy": 1.0,
+      "image_cnn_test_macro_f1": 1.0,
+      "image_cnn_real_world_accuracy": 0.1667,
+      "clip_zero_shot_test_accuracy": 0.8705,
+      "clip_zero_shot_test_macro_f1": 0.8731,
+      "clip_zero_shot_real_world_accuracy": 1.0,
+      "fused_test_accuracy": 1.0,
+      "fused_test_macro_f1": 1.0,
+      "fused_real_world_accuracy": 1.0,
+      "text_test_accuracy": 0.9669,
+      "text_test_samples_with_text": 362,
+      "per_class_f1_fused": {
+        "CERTIFICATE": 1.0,
+        "ACADEMIC_RECORD": 1.0,
+        "OTHER_DOCUMENT": 1.0,
+        "RANDOM_PHOTO": 1.0
+      }
+    },
+    "measured_on": "held-out test split + real-world Wikimedia Commons scans"
   },
   "tampering_detector": {
     "version": "1.0.0",

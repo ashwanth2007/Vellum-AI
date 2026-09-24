@@ -15,7 +15,7 @@ interface ProcessingPageProps {
 const STAGES = [
   { key: 'decode', title: '1. File type check and decoding', desc: 'Magic-byte sniffing. Images decoded with EXIF rotation, PDF pages rendered at 200 DPI.' },
   { key: 'ocr', title: '2. OCR and layout analysis', desc: 'RapidOCR (PaddleOCR models on ONNX Runtime): text lines with bounding boxes.' },
-  { key: 'classification', title: '3. Multi-modal document classification', desc: 'EfficientNet-B0 on the pixels + TF-IDF logistic regression on the OCR text, fused.' },
+  { key: 'classification', title: '3. Multi-modal document classification', desc: 'Fine-tuned EfficientNet-B0 + zero-shot CLIP on the pixels + TF-IDF model on the OCR text, fused.' },
   { key: 'field_extraction', title: '4. Field extraction', desc: 'Layout-aware rules pull the name, register number, CGPA, dates and the course table.' },
 ];
 

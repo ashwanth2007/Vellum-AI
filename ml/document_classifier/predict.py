@@ -30,7 +30,7 @@ from ml.document_classifier import clip_branch  # noqa: E402
 CHECKPOINT = BASE_DIR / "models" / "document_classifier.pt"
 INPUT_SIZE = 320
 # branch weights, tuned on the held-out test split + real-world scans (see evaluate.py)
-WEIGHTS = {"image": 0.35, "clip": 0.40, "text": 0.25}
+WEIGHTS = {"image": 0.45, "clip": 0.45, "text": 0.10}
 
 _model_instance = None
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

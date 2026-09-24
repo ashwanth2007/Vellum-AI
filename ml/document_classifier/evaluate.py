@@ -26,7 +26,8 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from ml.document_classifier import clip_branch  # noqa: E402
-from ml.document_classifier import predict as P  # noqa: E402
+import importlib  # noqa: E402
+P = importlib.import_module("ml.document_classifier.predict")
 from ml.document_classifier.data import DATA_DIR, read_manifest  # noqa: E402
 from ml.document_classifier.model import DOCUMENT_CLASSES  # noqa: E402
 from ml.document_classifier.text_model import load_cache, predict_text_proba  # noqa: E402
