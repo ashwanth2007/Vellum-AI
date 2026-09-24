@@ -1,62 +1,45 @@
 """
-Document Type Classification Model.
-Classifies visual documents into:
-0: ACADEMIC_CERTIFICATE
-1: TRANSCRIPT
-2: RECOMMENDATION_LETTER
-3: ID_PASSPORT
-4: INTERNSHIP_CERTIFICATE
+Document Type Classification Model (visual branch).
+
+Classes
+  0 CERTIFICATE      degree, course-completion, internship, participation certificates
+  1 ACADEMIC_RECORD  grade sheets, mark sheets, transcripts, CGPA / completion / bonafide letters, LORs
+  2 OTHER_DOCUMENT   a real document that is not an academic credential (invoice, form, memo, article)
+  3 RANDOM_PHOTO     anything that is not a document at all
+
+Backbone: ImageNet-pretrained EfficientNet-B0 (torchvision), fine-tuned end to end.
+forward() returns (logits, embedding) so older callers keep working.
 """
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from torchvision import models
 
-DOCUMENT_CLASSES = [
-    "ACADEMIC_CERTIFICATE",
-    "TRANSCRIPT",
-    "RECOMMENDATION_LETTER",
-    "ID_PASSPORT",
-    "INTERNSHIP_CERTIFICATE"
-]
+DOCUMENT_CLASSES = ["CERTIFICATE", "ACADEMIC_RECORD", "OTHER_DOCUMENT", "RANDOM_PHOTO"]
+RELEVANT_CLASSES = {"CERTIFICATE", "ACADEMIC_RECORD"}
+CLASS_LABELS = {
+    "CERTIFICATE": "Certificate",
+    "ACADEMIC_RECORD": "Academic record",
+    "OTHER_DOCUMENT": "Unrelated document",
+    "RANDOM_PHOTO": "Not a document",
+}
 
 
 class DocumentClassifier(nn.Module):
-    def __init__(self, num_classes: int = 5):
-        super(DocumentClassifier, self).__init__()
-        # Efficient lightweight convolutional backbone
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
-        
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
-        self.bn2 = nn.BatchNorm2d(64)
-        
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1)
-        self.bn3 = nn.BatchNorm2d(128)
-        
-        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)
-        self.bn4 = nn.BatchNorm2d(256)
-
-        self.pool = nn.AdaptiveAvgPool2d((1, 1))
-        
-        # Document layout embedding feature head
-        self.fc_embed = nn.Linear(256, 128)
+    def __init__(self, num_classes: int = 4, pretrained: bool = False):
+        super().__init__()
+        weights = models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None
+        net = models.efficientnet_b0(weights=weights)
+        self.features = net.features
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.fc_embed = nn.Linear(1280, 256)
         self.dropout = nn.Dropout(0.3)
-        self.fc_classifier = nn.Linear(128, num_classes)
+        self.fc_classifier = nn.Linear(256, num_classes)
 
     def extract_features(self, x: torch.Tensor) -> torch.Tensor:
-        """Extracts 128-dimensional document layout embedding."""
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = F.relu(self.bn4(self.conv4(x)))
-        x = self.pool(x)
-        x = torch.flatten(x, 1)
-        embed = F.relu(self.fc_embed(x))
-        return embed
+        x = self.pool(self.features(x)).flatten(1)
+        return torch.relu(self.fc_embed(x))
 
     def forward(self, x: torch.Tensor):
         embed = self.extract_features(x)
-        dropped = self.dropout(embed)
-        logits = self.fc_classifier(dropped)
-        return logits, embed
+        return self.fc_classifier(self.dropout(embed)), embed

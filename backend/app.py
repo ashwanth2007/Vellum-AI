@@ -31,6 +31,7 @@ import ml.stamp as stamp_module
 from ml.cross_verification.cross_verifier import CrossDocumentVerifier
 from ml.fusion.evidence_fusion import fuse
 from ml.utils.hardware import detect_hardware
+from ml.nlp.field_extractor import FieldExtractor
 
 app = FastAPI(
     title="Vellum Verification API",
@@ -50,6 +51,7 @@ ocr_service = get_ocr_service()
 entity_extractor = EntityExtractor()
 lor_analyzer = LORAnalyzer()
 cross_verifier = CrossDocumentVerifier()
+field_extractor = FieldExtractor()
 
 
 @app.get("/api/health")
@@ -155,6 +157,156 @@ async def verify_single_document(
         "signature_verification": sig_res,
         "stamp_verification": stamp_res,
         "evidence_fusion": fusion_res
+    }
+
+
+# ---------------------------------------------------------------------------------------------
+# /api/analyze : the prototype pipeline (any upload -> type check -> classification -> fields)
+# ---------------------------------------------------------------------------------------------
+import base64
+import time
+
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_PDF_PAGES = 5
+PDF_DPI = 300
+PREVIEW_MAX_SIDE = 1400
+IMAGE_FORMATS = {"PNG", "JPEG", "WEBP", "BMP", "TIFF", "GIF", "MPO"}
+
+
+def _load_pages(data: bytes):
+    """Return (mime, total_pages, [PIL pages]). Raises HTTPException(415) for unsupported files."""
+    if data[:5] == b"%PDF-":
+        import fitz  # PyMuPDF
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+        except Exception as e:
+            raise HTTPException(status_code=415, detail=f"This PDF could not be opened: {e}")
+        pages = []
+        for i in range(min(len(doc), MAX_PDF_PAGES)):
+            pix = doc[i].get_pixmap(dpi=PDF_DPI, alpha=False)
+            pages.append(Image.frombytes("RGB", (pix.width, pix.height), pix.samples))
+        if not pages:
+            raise HTTPException(status_code=415, detail="This PDF has no pages.")
+        return "application/pdf", len(doc), pages
+    try:
+        img = Image.open(io.BytesIO(data))
+        fmt = (img.format or "").upper()
+        img.load()
+    except Exception:
+        raise HTTPException(status_code=415, detail="Unsupported file. Upload an image (PNG, JPG, WEBP, BMP, TIFF) or a PDF.")
+    if fmt not in IMAGE_FORMATS:
+        raise HTTPException(status_code=415, detail=f"Unsupported image format '{fmt}'. Upload PNG, JPG, WEBP, BMP, TIFF or PDF.")
+    from PIL import ImageOps
+    img = ImageOps.exif_transpose(img).convert("RGB")  # phone photos carry EXIF rotation
+    return f"image/{'jpeg' if fmt == 'MPO' else fmt.lower()}", 1, [img]
+
+
+def _preview(img: Image.Image, lines):
+    s = min(1.0, PREVIEW_MAX_SIDE / max(img.size))
+    pv = img.resize((int(img.width * s), int(img.height * s)), Image.LANCZOS) if s < 1 else img
+    buf = io.BytesIO()
+    pv.save(buf, "JPEG", quality=82)
+    boxes = [{"bbox": [int(v * s) for v in l["bbox"]], "text": l["text"], "confidence": l["confidence"]} for l in lines]
+    return {"image": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode(),
+            "width": pv.width, "height": pv.height, "boxes": boxes}
+
+
+HEADLINES = {
+    "CERTIFICATE": "Relevant: this is a certificate.",
+    "ACADEMIC_RECORD": "Relevant: this is an academic record (grade sheet, transcript or academic letter).",
+    "OTHER_DOCUMENT": "Not relevant: this is a document, but not an academic credential.",
+    "RANDOM_PHOTO": "Not relevant: this is not a document.",
+}
+
+
+DEMO_DIR = BASE_DIR / "demo_samples"
+
+
+@app.get("/api/samples")
+def list_samples():
+    """Files in demo_samples/, offered as one-click samples on the upload page."""
+    if not DEMO_DIR.exists():
+        return []
+    return [{"name": p.name, "size": p.stat().st_size} for p in sorted(DEMO_DIR.iterdir()) if p.is_file() and not p.name.startswith(".")]
+
+
+@app.get("/api/samples/{name}")
+def get_sample(name: str):
+    from fastapi.responses import FileResponse
+    p = (DEMO_DIR / name).resolve()
+    if p.parent != DEMO_DIR.resolve() or not p.is_file():  # no path traversal
+        raise HTTPException(status_code=404, detail="Sample not found.")
+    return FileResponse(p, filename=p.name)
+
+
+@app.post("/api/analyze")
+async def analyze(file: UploadFile = File(...)):
+    """Accept any upload, check the file type, classify the document, extract fields."""
+    t0 = time.perf_counter()
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File is larger than 25 MB.")
+    mime, total_pages, pages = _load_pages(data)
+    timings = {"decode": round((time.perf_counter() - t0) * 1000)}
+
+    page_results = []
+    for i, img in enumerate(pages):
+        t = time.perf_counter()
+        ocr = ocr_service.extract_text_and_layout(img)
+        t_ocr = time.perf_counter()
+        cls = doc_module.predict(img, ocr_text=ocr["full_text"])
+        t_cls = time.perf_counter()
+        page_results.append({"img": img, "ocr": ocr, "cls": cls})
+        if i == 0:
+            timings["ocr"] = round((t_ocr - t) * 1000)
+            timings["classification"] = round((t_cls - t_ocr) * 1000)
+
+    first = page_results[0]
+    cls, ocr = first["cls"], first["ocr"]
+    t = time.perf_counter()
+    if cls["is_relevant"]:
+        extraction = field_extractor.extract(ocr["lines"], cls["document_type"])
+        # a multi-page record: pull fields the first page lacked from later relevant pages
+        have = {f["key"] for f in extraction["fields"]}
+        for pr in page_results[1:]:
+            if pr["cls"]["is_relevant"]:
+                more = field_extractor.extract(pr["ocr"]["lines"], pr["cls"]["document_type"])
+                extraction["fields"] += [f for f in more["fields"] if f["key"] not in have]
+                have |= {f["key"] for f in more["fields"]}
+                if not extraction["table"] and more["table"]:
+                    extraction["table"] = more["table"]
+    else:
+        extraction = {"fields": [], "table": None}
+    timings["field_extraction"] = round((time.perf_counter() - t) * 1000)
+
+    experimental = None
+    if cls["is_relevant"]:
+        try:
+            tr = tamper_module.predict(np.array(first["img"]))
+            experimental = {"tampering": {k: tr.get(k) for k in ("status", "is_tampered", "tampering_probability", "suspicious_regions_count")}}
+        except Exception:
+            experimental = None
+    timings["total"] = round((time.perf_counter() - t0) * 1000)
+
+    return {
+        "document_name": file.filename,
+        "file_type": mime,
+        "page_count": total_pages,
+        "pages_analyzed": len(pages),
+        "verdict": {"is_relevant": cls["is_relevant"], "label": cls["label"], "headline": HEADLINES[cls["document_type"]]},
+        "classification": cls,
+        "fields": extraction["fields"],
+        "table": extraction["table"],
+        "ocr": {"engine": ocr["engine"], "word_count": ocr["word_count"], "average_confidence": ocr["average_confidence"],
+                "text": ocr["full_text"][:3000]},
+        "preview": _preview(first["img"], ocr["lines"]),
+        "pages": [{"page": i + 1, "document_type": pr["cls"]["document_type"], "label": pr["cls"]["label"],
+                   "confidence": pr["cls"]["confidence"], "is_relevant": pr["cls"]["is_relevant"]}
+                  for i, pr in enumerate(page_results)],
+        "experimental": experimental,
+        "timings_ms": timings,
     }
 
 

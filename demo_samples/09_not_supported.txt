@@ -1,0 +1,1 @@
+Plain text file, the API should reject this with a clear message.

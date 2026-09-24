@@ -1,182 +1,125 @@
 """
-OCR & Document Layout Analysis Service.
-Extracts raw text, line bounding boxes, word positions, and confidence scores from document images.
+OCR and Document Layout Service.
+
+Engine order: RapidOCR (PaddleOCR models on ONNX Runtime, pip-only, no system binary),
+then PyTesseract if a Tesseract binary is installed. If neither is available the service
+returns an EMPTY result with engine "none". It never fabricates text.
+
+Output of extract_text_and_layout():
+  full_text           lines joined top-to-bottom, left-to-right
+  lines               [{text, bbox [x1, y1, x2, y2], confidence}]
+  word_count
+  average_confidence
+  engine
 """
 
-import os
+from pathlib import Path
+from typing import Any, Dict, List, Union
+
 import cv2
 import numpy as np
 from PIL import Image
-from typing import Dict, List, Any, Union
-from pathlib import Path
+
+MAX_OCR_SIDE = 2400
+MIN_OCR_SIDE = 1800  # small phone photos are upscaled: tiny glyphs lose word spaces and whole table rows
+
+
+def _to_rgb_array(image_input: Union[str, Path, Image.Image, np.ndarray]) -> np.ndarray:
+    if isinstance(image_input, (str, Path)):
+        return np.array(Image.open(image_input).convert("RGB"))
+    if isinstance(image_input, Image.Image):
+        return np.array(image_input.convert("RGB"))
+    if isinstance(image_input, np.ndarray):
+        if image_input.ndim == 2:
+            return cv2.cvtColor(image_input, cv2.COLOR_GRAY2RGB)
+        if image_input.shape[2] == 4:
+            return cv2.cvtColor(image_input, cv2.COLOR_RGBA2RGB)
+        return image_input
+    raise ValueError(f"Unsupported image input type: {type(image_input)}")
+
+
+def _order_lines(lines: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sort boxes into reading order: group by row (vertical overlap), then left to right."""
+    if not lines:
+        return lines
+    lines = sorted(lines, key=lambda l: (l["bbox"][1] + l["bbox"][3]) / 2)
+    rows, current = [], [lines[0]]
+    for l in lines[1:]:
+        prev = current[-1]
+        h = max(1, prev["bbox"][3] - prev["bbox"][1])
+        if abs((l["bbox"][1] + l["bbox"][3]) / 2 - (prev["bbox"][1] + prev["bbox"][3]) / 2) < 0.5 * h:
+            current.append(l)
+        else:
+            rows.append(current)
+            current = [l]
+    rows.append(current)
+    out = []
+    for r in rows:
+        out.extend(sorted(r, key=lambda l: l["bbox"][0]))
+    return out
 
 
 class OCRService:
     def __init__(self):
-        self.engine_name = "PaddleOCR/VisionEngine"
-        self._init_engine()
-
-    def _init_engine(self):
-        self.has_paddle = False
-        self.has_tesseract = False
-
+        self.engine_name = "none"
+        self.rapid = None
+        self.pytesseract = None
         try:
-            from paddleocr import PaddleOCR
-            self.paddle = PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
-            self.has_paddle = True
-            self.engine_name = "PaddleOCR"
+            from rapidocr_onnxruntime import RapidOCR
+            self.rapid = RapidOCR()
+            self.engine_name = "RapidOCR"
         except Exception:
-            pass
-
-        if not self.has_paddle:
             try:
                 import pytesseract
-                _ = pytesseract.get_tesseract_version()
+                pytesseract.get_tesseract_version()
                 self.pytesseract = pytesseract
-                self.has_tesseract = True
                 self.engine_name = "PyTesseract"
             except Exception:
                 pass
 
-    def extract_text_and_layout(self, image_input: Union[str, Path, Image.Image, np.ndarray]) -> Dict[str, Any]:
-        if isinstance(image_input, (str, Path)):
-            img = cv2.imread(str(image_input))
-            if img is None:
-                pil_img = Image.open(image_input).convert("RGB")
-                img = np.array(pil_img)
-            else:
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        elif isinstance(image_input, Image.Image):
-            img = np.array(image_input.convert("RGB"))
-        elif isinstance(image_input, np.ndarray):
-            img = image_input
-            if len(img.shape) == 2:
-                img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-        else:
-            raise ValueError(f"Unsupported image input type: {type(image_input)}")
-
+    def extract_text_and_layout(self, image_input) -> Dict[str, Any]:
+        img = _to_rgb_array(image_input)
         h, w = img.shape[:2]
+        scale = 1.0
+        if max(h, w) > MAX_OCR_SIDE:
+            scale = MAX_OCR_SIDE / max(h, w)
+        elif max(h, w) < MIN_OCR_SIDE:
+            scale = MIN_OCR_SIDE / max(h, w)
+        if scale != 1.0:
+            interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
+            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=interp)
 
-        # 1. PaddleOCR branch
-        if self.has_paddle:
-            try:
-                results = self.paddle.ocr(img, cls=True)
-                lines = []
-                full_text_list = []
-                conf_sum = 0.0
+        lines: List[Dict[str, Any]] = []
+        if self.rapid is not None:
+            result, _ = self.rapid(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            for box, text, conf in result or []:
+                xs, ys = [p[0] for p in box], [p[1] for p in box]
+                lines.append({"text": str(text).strip(),
+                              "bbox": [int(min(xs) / scale), int(min(ys) / scale), int(max(xs) / scale), int(max(ys) / scale)],
+                              "confidence": round(float(conf), 3)})
+        elif self.pytesseract is not None:
+            d = self.pytesseract.image_to_data(img, output_type=self.pytesseract.Output.DICT)
+            for i in range(len(d["text"])):
+                t, c = d["text"][i].strip(), float(d["conf"][i])
+                if t and c > 0:
+                    x, y, bw, bh = d["left"][i], d["top"][i], d["width"][i], d["height"][i]
+                    lines.append({"text": t, "bbox": [int(x / scale), int(y / scale), int((x + bw) / scale), int((y + bh) / scale)],
+                                  "confidence": round(c / 100.0, 3)})
 
-                if results and results[0]:
-                    for line_res in results[0]:
-                        poly, (text, conf) = line_res
-                        xs = [p[0] for p in poly]
-                        ys = [p[1] for p in poly]
-                        bbox = [int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))]
-                        lines.append({
-                            "text": text.strip(),
-                            "bbox": bbox,
-                            "confidence": round(float(conf), 3)
-                        })
-                        full_text_list.append(text.strip())
-                        conf_sum += conf
-
-                avg_conf = (conf_sum / len(lines)) if lines else 0.95
-                return {
-                    "full_text": "\n".join(full_text_list),
-                    "lines": lines,
-                    "word_count": sum(len(l["text"].split()) for l in lines),
-                    "average_confidence": round(float(avg_conf), 3),
-                    "engine": "PaddleOCR"
-                }
-            except Exception:
-                pass
-
-        # 2. PyTesseract branch
-        if self.has_tesseract:
-            try:
-                data = self.pytesseract.image_to_data(img, output_type=self.pytesseract.Output.DICT)
-                lines = []
-                full_text_list = []
-                conf_sum = 0.0
-                valid_count = 0
-
-                n_boxes = len(data['level'])
-                for i in range(n_boxes):
-                    text = data['text'][i].strip()
-                    conf = float(data['conf'][i])
-                    if text and conf > 0:
-                        x, y, bw, bh = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
-                        lines.append({
-                            "text": text,
-                            "bbox": [x, y, x + bw, y + bh],
-                            "confidence": round(conf / 100.0, 3)
-                        })
-                        full_text_list.append(text)
-                        conf_sum += conf / 100.0
-                        valid_count += 1
-
-                avg_conf = (conf_sum / valid_count) if valid_count > 0 else 0.90
-                return {
-                    "full_text": " ".join(full_text_list),
-                    "lines": lines,
-                    "word_count": len(full_text_list),
-                    "average_confidence": round(float(avg_conf), 3),
-                    "engine": "PyTesseract"
-                }
-            except Exception:
-                pass
-
-        # 3. Visual & Layout OCR Segmenter (Computer vision fallback engine)
-        return self._extract_layout_contours(img)
-
-    def _extract_layout_contours(self, img: np.ndarray) -> Dict[str, Any]:
-        h, w = img.shape[:2]
-        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-        
-        # Binary thresholding
-        _, thresh = cv2.threshold(gray, 220, 255, cv2.THRESH_BINARY_INV)
-        
-        # Horizontal dilation for text lines
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 3))
-        dilated = cv2.dilate(thresh, kernel, iterations=2)
-        
-        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        boxes = []
-        for c in contours:
-            x, y, bw, bh = cv2.boundingRect(c)
-            # Filter borders and tiny specks
-            if 20 <= bw < (w * 0.95) and 8 <= bh < (h * 0.40):
-                boxes.append([x, y, x + bw, y + bh])
-                
-        # If no contours found, generate standard layout bands
-        if not boxes:
-            boxes = [
-                [int(w * 0.2), int(h * 0.1), int(w * 0.8), int(h * 0.18)],
-                [int(w * 0.25), int(h * 0.28), int(w * 0.75), int(h * 0.35)],
-                [int(w * 0.1), int(h * 0.6), int(w * 0.4), int(h * 0.75)],
-                [int(w * 0.6), int(h * 0.65), int(w * 0.9), int(h * 0.75)]
-            ]
-        else:
-            boxes.sort(key=lambda b: (b[1] // 25, b[0]))
-        
-        lines = []
-        for idx, b in enumerate(boxes):
-            lines.append({
-                "text": f"Document Line Region #{idx+1}",
-                "bbox": b,
-                "confidence": 0.94
-            })
-            
+        lines = [l for l in lines if l["text"]]
+        lines = _order_lines(lines)
+        avg = sum(l["confidence"] for l in lines) / len(lines) if lines else 0.0
         return {
-            "full_text": "APEX UNIVERSITY OF TECHNOLOGY\nCERTIFICATE OF GRADUATION\nThis is to certify that Arun Kumar has completed Bachelor of Technology\nCertificate No: AUST-20230001\nDate of Issue: 15th July 2024",
+            "full_text": "\n".join(l["text"] for l in lines),
             "lines": lines,
-            "word_count": max(len(lines) * 4, 15),
-            "average_confidence": 0.94,
-            "engine": "VisualLayoutOCR"
+            "word_count": sum(len(l["text"].split()) for l in lines),
+            "average_confidence": round(avg, 3),
+            "engine": self.engine_name,
         }
 
 
 _ocr_service_instance = None
+
 
 def get_ocr_service() -> OCRService:
     global _ocr_service_instance
@@ -186,5 +129,8 @@ def get_ocr_service() -> OCRService:
 
 
 if __name__ == "__main__":
+    import sys
     ocr = get_ocr_service()
     print("OCR Engine:", ocr.engine_name)
+    if len(sys.argv) > 1:
+        print(ocr.extract_text_and_layout(sys.argv[1])["full_text"])

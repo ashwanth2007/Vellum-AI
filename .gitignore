@@ -40,3 +40,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Vellum prototype: large local artifacts (rebuild with scripts/, download with scripts/download_models.py)
+.wheels/
+data/classifier/
+models/clip-vit-b32-laion/
+models/clip-vit-base-patch32/

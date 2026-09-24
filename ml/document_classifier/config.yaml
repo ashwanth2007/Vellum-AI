@@ -1,17 +1,19 @@
 model_name: "document_classifier"
-version: "1.0.0"
-architecture: "LightweightConvNet_EmbeddingHead"
-input_shape: [3, 224, 224]
-num_classes: 5
+version: "2.0.0"
+architecture: "EfficientNetB0_ImageNetPretrained_FineTuned"
+input_size: 320
+num_classes: 4
 classes:
-  - "ACADEMIC_CERTIFICATE"
-  - "TRANSCRIPT"
-  - "RECOMMENDATION_LETTER"
-  - "ID_PASSPORT"
-  - "INTERNSHIP_CERTIFICATE"
+  - "CERTIFICATE"
+  - "ACADEMIC_RECORD"
+  - "OTHER_DOCUMENT"
+  - "RANDOM_PHOTO"
 training:
-  epochs: 8
-  batch_size: 16
-  learning_rate: 0.001
+  epochs: 12
+  batch_size: 32
+  learning_rate: 0.0006
   weight_decay: 0.0001
+  label_smoothing: 0.05
+  num_workers: 2
 checkpoint: "models/document_classifier.pt"
+text_checkpoint: "models/document_text_model.joblib"
