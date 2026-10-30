@@ -14,7 +14,7 @@ if (-not (Test-Url "http://127.0.0.1:8000/api/health")) {
 }
 if (-not (Test-Url "http://127.0.0.1:5173/")) {
     Start-Process -WindowStyle Hidden -FilePath "cmd.exe" -WorkingDirectory "$root\frontend" `
-        -ArgumentList "/c","npx vite --host 127.0.0.1 --port 5173 --strictPort > ..\frontend.log 2>&1"
+        -ArgumentList "/c","node --max-http-header-size=131072 node_modules\vite\bin\vite.js --host 127.0.0.1 --port 5173 --strictPort > ..\frontend.log 2>&1"
 }
 
 Write-Host "Waiting for backend (models load in ~20 s) and frontend..."

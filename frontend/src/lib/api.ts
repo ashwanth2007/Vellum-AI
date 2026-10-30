@@ -17,10 +17,21 @@ export interface Classification {
   is_relevant: boolean;
   confidence: number;
   class_probabilities: Record<DocClass, number>;
-  image_probabilities: Record<DocClass, number>;
-  clip_probabilities: Record<DocClass, number> | null;
-  text_probabilities: Record<DocClass, number> | null;
-  fusion_mode: string;
+  decision: CascadeDecision;
+}
+
+export type ModelKey = 'image' | 'clip' | 'text';
+
+// The early-exit cascade picked ONE model; this says which, and why the others never ran.
+export interface CascadeDecision {
+  model: ModelKey;
+  model_name: string;
+  accepted: boolean;
+  threshold: number;
+  latency_ms: number;
+  models_run: ModelKey[];
+  models_skipped: ModelKey[];
+  decision_ms: number;
 }
 
 export interface ExtractedField {
@@ -107,4 +118,20 @@ export async function fetchSample(name: string): Promise<File> {
   if (!r.ok) throw new Error(`Sample ${name} not found`);
   const blob = await r.blob();
   return new File([blob], name.split('/').pop() as string, { type: blob.type });
+}
+
+export interface CnnExplanation {
+  input: { image: string; size: number; mean: number[]; std: number[]; channels: string[] };
+  stages: { index: number; shape: [number, number, number]; params: number; maps: { channel: number; image: string }[] }[];
+  pooled: { length: number; top: { index: number; value: number }[] };
+  embedding_length: number;
+  probabilities: Record<DocClass, number>;
+}
+
+export async function explainCnn(file: File): Promise<CnnExplanation> {
+  const body = new FormData();
+  body.append('file', file);
+  const r = await fetch('/api/explain/cnn', { method: 'POST', body });
+  if (!r.ok) throw new Error(`Server returned ${r.status}`);
+  return r.json();
 }

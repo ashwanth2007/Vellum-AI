@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, ArrowRight, ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
+import { AnalysisResult } from '../lib/api';
 
 interface ProcessingPageProps {
   fileName: string;
   status: 'running' | 'done' | 'error';
-  timings?: Record<string, number>;
+  result?: AnalysisResult | null;
   error?: string;
   onComplete: () => void;
   onBack: () => void;
@@ -14,12 +15,14 @@ interface ProcessingPageProps {
 
 const STAGES = [
   { key: 'decode', title: '1. File type check and decoding', desc: 'Magic-byte sniffing. Images decoded with EXIF rotation, PDF pages rendered at 300 DPI.' },
-  { key: 'ocr', title: '2. OCR and layout analysis', desc: 'RapidOCR (PaddleOCR models on ONNX Runtime): text lines with bounding boxes.' },
-  { key: 'classification', title: '3. Multi-modal document classification', desc: 'Fine-tuned EfficientNet-B0 + zero-shot CLIP on the pixels + TF-IDF model on the OCR text, fused.' },
+  { key: 'classification', title: '2. Early-exit model cascade', desc: 'EfficientNet-B0 first. If it is under 90% sure, CLIP. Then the OCR text model. The first confident model answers and the rest never run.' },
+  { key: 'ocr', title: '3. OCR (only when needed)', desc: 'RapidOCR reads text lines with boxes, only for relevant documents or when the text model is reached.' },
   { key: 'field_extraction', title: '4. Field extraction', desc: 'Layout-aware rules pull the name, register number, CGPA, dates and the course table.' },
 ];
 
-export const ProcessingPage: React.FC<ProcessingPageProps> = ({ fileName, status, timings, error, onComplete, onBack }) => {
+export const ProcessingPage: React.FC<ProcessingPageProps> = ({ fileName, status, result, error, onComplete, onBack }) => {
+  const timings = result?.timings_ms;
+  const decision = result?.classification.decision;
   const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
@@ -38,7 +41,7 @@ export const ProcessingPage: React.FC<ProcessingPageProps> = ({ fileName, status
           <span className={`h-2 w-2 rounded-full ${status === 'error' ? 'bg-rose-600' : 'bg-emerald-600 animate-pulse'}`} />
           <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Step 2 of 3: Inference</span>
         </div>
-        <h1 className="font-serif text-3xl md:text-4xl font-normal tracking-tight text-zinc-950">Multi-Modal Pipeline</h1>
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-zinc-950">Running the pipeline</h1>
         <p className="text-xs text-zinc-500 max-w-xl leading-relaxed break-all">Analysing {fileName}</p>
       </div>
 
@@ -72,6 +75,12 @@ export const ProcessingPage: React.FC<ProcessingPageProps> = ({ fileName, status
                   <div>
                     <div className="text-xs font-semibold">{stage.title}</div>
                     <div className="text-[11px] text-zinc-500">{stage.desc}</div>
+                    {status === 'done' && stage.key === 'classification' && decision && (
+                      <div className="text-[11px] text-emerald-700 font-medium mt-0.5">Answered by {decision.model_name}</div>
+                    )}
+                    {status === 'done' && stage.key === 'ocr' && timings?.ocr === 0 && (
+                      <div className="text-[11px] text-zinc-500 font-medium mt-0.5">Skipped: not needed for this file</div>
+                    )}
                   </div>
                 </div>
                 {ms !== undefined && (

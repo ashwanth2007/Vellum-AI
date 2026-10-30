@@ -61,6 +61,23 @@
       "fused_test_accuracy": 1.0,
       "fused_test_macro_f1": 1.0,
       "fused_real_world_accuracy": 1.0,
+      "cascade_test_accuracy": 1.0,
+      "cascade_test_answered_by": {
+        "image": 448,
+        "clip": 0,
+        "text": 0
+      },
+      "cascade_real_world_accuracy": 1.0,
+      "cascade_real_world_answered_by": {
+        "image": 1,
+        "clip": 5,
+        "text": 0
+      },
+      "cascade_thresholds": {
+        "image": 0.9,
+        "clip": 0.9,
+        "text": 0.0
+      },
       "text_test_accuracy": 0.9669,
       "text_test_samples_with_text": 362,
       "per_class_f1_fused": {

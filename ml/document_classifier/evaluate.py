@@ -118,6 +118,28 @@ def evaluate():
         res[f"{name}_test_accuracy"] = round(accuracy_score(yt, preds_t), 4)
         res[f"{name}_test_macro_f1"] = round(f1_score(yt, preds_t, average="macro"), 4)
         res[f"{name}_real_world_accuracy"] = round(accuracy_score(yr, preds_r), 4)
+    # the serving path: early-exit cascade (predict.CASCADE), which model answered and how often
+    def cascade(pi_, pc_, pt_):
+        preds, who = [], []
+        for a, b, c in zip(pi_, pc_, pt_):
+            seen = []
+            for st, p in zip(P.CASCADE, (a, b, c)):
+                if p is None:
+                    continue
+                seen.append((st["key"], p))
+                if p.max() >= st["threshold"]:
+                    break
+            else:
+                seen.append(max(seen, key=lambda s: s[1].max()))
+            preds.append(int(np.argmax(seen[-1][1])))
+            who.append(seen[-1][0])
+        return np.array(preds), {k: who.count(k) for k in ("image", "clip", "text")}
+    for name, (y_, a_, b_, c_) in (("test", (yt, it, ct, tt)), ("real_world", (yr, ir, cr, tr))):
+        pr_, who = cascade(a_, b_, c_)
+        res[f"cascade_{name}_accuracy"] = round(accuracy_score(y_, pr_), 4)
+        res[f"cascade_{name}_answered_by"] = who
+    res["cascade_thresholds"] = {s["key"]: s["threshold"] for s in P.CASCADE}
+
     mask = np.array([p is not None for p in tt])
     if mask.any():
         res["text_test_accuracy"] = round(accuracy_score(yt[mask], np.array([p.argmax() for p in np.array(tt, dtype=object)[mask]])), 4)

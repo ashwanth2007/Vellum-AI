@@ -1,5 +1,5 @@
 """
-Builds presentation/Vellum-AI-Prototype.pptx from the real screenshots in presentation/shots/
+Builds presentation/Vellum-AI-Presentation.pptx from the real screenshots in presentation/shots/
 and the measured metrics in models/document_classifier_metrics.json.
 
   python presentation/build_deck.py
@@ -17,16 +17,21 @@ from PIL import Image
 
 BASE = Path(__file__).resolve().parent.parent
 SHOTS = BASE / "presentation" / "shots"
-OUT = BASE / "presentation" / "Vellum-AI-Prototype.pptx"
+OUT = BASE / "presentation" / "Vellum-AI-Presentation.pptx"
 METRICS = json.load(open(BASE / "models" / "document_classifier_metrics.json"))
 
-INK = RGBColor(0x1B, 0x24, 0x33)       # deep ink navy, dominant
-PAPER = RGBColor(0xFF, 0xFF, 0xFF)
-PARCH = RGBColor(0xF4, 0xF1, 0xEA)     # light parchment panels
-SEAL = RGBColor(0xA8, 0x2B, 0x2B)      # wax-seal red accent
+# Palette and type follow the running app (frontend/tailwind.config.js, globals.css)
+INK = RGBColor(0x14, 0x14, 0x16)       # ink, dark slides and headings
+PAPER = RGBColor(0xFA, 0xF8, 0xF5)     # canvas, slide background
+PARCH = RGBColor(0xF4, 0xF0, 0xE8)     # canvas-subtle panels
+SAND = RGBColor(0xEC, 0xE7, 0xDD)      # canvas-sand, highlighted panels
+SEAL = RGBColor(0x9E, 0x2A, 0x2B)      # accent-crimson, rejected
+GOLD = RGBColor(0xC2, 0x9B, 0x38)      # accent-gold
 GREEN = RGBColor(0x1E, 0x7A, 0x4F)
-MUTED = RGBColor(0x5B, 0x64, 0x72)
-HEAD, BODY = "Cambria", "Calibri"
+MUTED = RGBColor(0x71, 0x71, 0x7A)
+ON_DARK = RGBColor(0xEC, 0xE7, 0xDD)
+ON_DARK_MUTED = RGBColor(0xA1, 0xA1, 0xAA)
+HEAD, BODY = "Segoe UI Semibold", "Segoe UI"   # Inter is not installed here; Segoe UI is the app's own fallback
 
 prs = Presentation()
 prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
@@ -95,7 +100,7 @@ def dot(slide, x, y, d, color, label=""):
         p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
         r = p.add_run(); r.text = label
         r.font.size, r.font.bold, r.font.name = Pt(16), True, BODY
-        r.font.color.rgb = PAPER
+        r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     return s
 
@@ -117,17 +122,40 @@ def title(slide, s, sub=None, color=INK):
 
 
 pct = lambda v: f"{v * 100:.1f}%"
+m0 = METRICS
 
 # 1. Title ---------------------------------------------------------------------------------
 s = prs.slides.add_slide(BLANK); bg(s, INK)
-dot(s, Inches(0.6), Inches(0.7), Inches(0.9), SEAL, "V")
+dot(s, Inches(0.6), Inches(0.7), Inches(0.9), GOLD, "V")
 text(s, Inches(0.6), Inches(2.1), Inches(11.5), Inches(1.3), "Vellum AI", size=60, bold=True, font=HEAD, color=PAPER)
 text(s, Inches(0.6), Inches(3.3), Inches(11.5), Inches(1.2),
-     "Multi-modal AI document verification and credential forensic intelligence", size=24, color=RGBColor(0xDD, 0xE3, 0xEE))
-text(s, Inches(0.6), Inches(5.4), Inches(11.5), Inches(0.5), "BCSE306L Artificial Intelligence  |  Course project prototype", size=16, color=RGBColor(0xB8, 0xC1, 0xCF))
-text(s, Inches(0.6), Inches(5.85), Inches(11.5), Inches(0.5), "VIT Vellore  |  Fall Semester 2026-27", size=16, color=RGBColor(0xB8, 0xC1, 0xCF))
+     "Multi-modal AI document verification and credential forensic intelligence", size=24, color=ON_DARK)
+text(s, Inches(0.6), Inches(5.4), Inches(11.5), Inches(0.5), "BCSE306L Artificial Intelligence  |  Course project prototype", size=16, color=ON_DARK_MUTED)
+text(s, Inches(0.6), Inches(5.85), Inches(11.5), Inches(0.5), "VIT Vellore  |  Fall Semester 2026-27", size=16, color=ON_DARK_MUTED)
 
-# 2. Problem ---------------------------------------------------------------------------------
+# 2. What changed after the first review -------------------------------------------------------
+s = prs.slides.add_slide(BLANK); bg(s, PAPER)
+title(s, "What changed after the first review", "Reviewer feedback on the left, what we built in response on the right")
+card(s, Inches(0.6), Inches(2.0), Inches(4.3), Inches(4.9))
+text(s, Inches(0.9), Inches(2.2), Inches(3.8), Inches(0.5), "Review feedback", size=20, bold=True, font=HEAD, color=SEAL)
+bullets(s, Inches(0.9), Inches(2.85), Inches(3.8), Inches(3.9), [
+    "Make clear which files can be uploaded",
+    "Three models processing every upload is wasteful",
+    "The best model should be chosen automatically",
+    "Explain the actual ML, not just show screens",
+], size=15)
+card(s, Inches(5.2), Inches(2.0), Inches(7.5), Inches(4.9), fill=SAND)
+text(s, Inches(5.5), Inches(2.2), Inches(7.0), Inches(0.5), "What we changed", size=20, bold=True, font=HEAD, color=GREEN)
+bullets(s, Inches(5.5), Inches(2.85), Inches(7.0), Inches(3.9), [
+    ("Early-exit cascade:", f"models run fastest first and the first one at least 90% sure answers, the rest never run. Still {pct(m0['cascade_test_accuracy'])} test, {pct(m0['cascade_real_world_accuracy'])} real scans"),
+    ("Result page:", "shows the one model that decided, its confidence and its time"),
+    ("OCR only when needed:", "a rejected photo never pays the seconds OCR costs"),
+    ("Handbook page:", "accepted inputs, the four classes, every extracted field, each pipeline step"),
+    ("Learn the ML:", "five explainer tabs, with live CNN feature maps from the real model"),
+    ("Mock screens removed:", "every page left in the app runs on the real model"),
+], size=14, gap=6)
+
+# 2b. Problem ---------------------------------------------------------------------------------
 s = prs.slides.add_slide(BLANK); bg(s, PAPER)
 title(s, "The problem", "Institutions receive thousands of uploaded documents and check each one by hand")
 card(s, Inches(0.6), Inches(2.0), Inches(5.9), Inches(4.8))
@@ -138,7 +166,7 @@ bullets(s, Inches(0.9), Inches(2.85), Inches(5.3), Inches(3.8), [
     "Staff open each file to check what it is and copy the name, register number and CGPA by hand",
     "Slow, error prone, and it does not scale at admission or placement time",
 ], size=16)
-card(s, Inches(6.85), Inches(2.0), Inches(5.9), Inches(4.8), fill=RGBColor(0xEE, 0xF4, 0xF0))
+card(s, Inches(6.85), Inches(2.0), Inches(5.9), Inches(4.8), fill=SAND)
 text(s, Inches(7.15), Inches(2.2), Inches(5.4), Inches(0.5), "What Vellum does", size=20, bold=True, font=HEAD, color=GREEN)
 bullets(s, Inches(7.15), Inches(2.85), Inches(5.3), Inches(3.8), [
     ("1. Accepts anything:", "any image format or a multi-page PDF, and rejects unsupported files with a clear message"),
@@ -170,18 +198,18 @@ steps = [
     ("Intake", "Magic-byte check. Images decoded with EXIF rotation, PDF pages rendered at 300 DPI"),
     ("OCR", "RapidOCR (PaddleOCR models on ONNX Runtime) reads every text line with its box"),
     ("Three classifiers", "Fine-tuned CNN on pixels, zero-shot CLIP on pixels, TF-IDF model on the OCR text"),
-    ("Fusion", "Weighted average of the three probability vectors decides the class"),
+    ("Cascade", "Fastest model first; the first one at least 90% confident decides the class"),
     ("Field extraction", "For relevant documents only: layout-aware rules pull out the fields"),
 ]
 for i, (n, d) in enumerate(steps):
     x = Inches(0.6) + i * Inches(2.5)
-    dot(s, x, Inches(2.2), Inches(0.75), INK if i != 3 else SEAL, str(i + 1))
+    dot(s, x, Inches(2.2), Inches(0.75), INK if i != 3 else GOLD, str(i + 1))
     if i < 4:
         a = s.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, x + Inches(0.95), Inches(2.43), Inches(1.3), Inches(0.3))
         a.fill.solid(); a.fill.fore_color.rgb = RGBColor(0xC9, 0xC4, 0xB8); a.line.fill.background()
     text(s, x, Inches(3.2), Inches(2.3), Inches(0.5), n, size=18, bold=True, font=HEAD)
     text(s, x, Inches(3.75), Inches(2.25), Inches(2.4), d, size=14, color=MUTED)
-card(s, Inches(0.6), Inches(5.9), Inches(12.1), Inches(1.0), fill=RGBColor(0xEE, 0xF1, 0xF6))
+card(s, Inches(0.6), Inches(5.9), Inches(12.1), Inches(1.0), fill=SAND)
 text(s, Inches(0.9), Inches(6.0), Inches(11.6), Inches(0.8),
      "Stack: PyTorch, torchvision, Hugging Face Transformers, scikit-learn, RapidOCR, PyMuPDF, FastAPI backend, React + Vite + Tailwind frontend",
      size=15, color=INK, anchor=MSO_ANCHOR.MIDDLE)
@@ -197,12 +225,12 @@ rows = [
      f"{pct(m['clip_zero_shot_test_accuracy'])} test", f"{pct(m['clip_zero_shot_real_world_accuracy'])} real scans"),
     ("OCR text model", "TF-IDF word and character n-grams + logistic regression on the OCR text",
      f"{pct(m.get('text_test_accuracy', 0))} test", "reads the words"),
-    ("Fused", f"Weights image {m['fusion_weights']['image']}, CLIP {m['fusion_weights']['clip']}, text {m['fusion_weights']['text']}",
-     f"{pct(m['fused_test_accuracy'])} test", f"{pct(m['fused_real_world_accuracy'])} real scans"),
+    ("Cascade", f"CNN answered {m['cascade_test_answered_by']['image']} of {m['test_samples']} test images; CLIP answered {m['cascade_real_world_answered_by']['clip']} of {m['real_world_samples']} real scans",
+     f"{pct(m['cascade_test_accuracy'])} test", f"{pct(m['cascade_real_world_accuracy'])} real scans"),
 ]
 for i, (n, d, a, b) in enumerate(rows):
     y = Inches(1.95) + i * Inches(1.25)
-    card(s, Inches(0.6), y, Inches(12.1), Inches(1.1), fill=PARCH if i < 3 else RGBColor(0xEE, 0xF4, 0xF0))
+    card(s, Inches(0.6), y, Inches(12.1), Inches(1.1), fill=PARCH if i < 3 else SAND)
     text(s, Inches(0.9), y + Inches(0.12), Inches(2.6), Inches(0.9), n, size=20, bold=True, font=HEAD,
          color=GREEN if i == 3 else INK, anchor=MSO_ANCHOR.MIDDLE)
     text(s, Inches(3.5), y + Inches(0.12), Inches(5.3), Inches(0.9), d, size=14, color=MUTED, anchor=MSO_ANCHOR.MIDDLE)
@@ -289,18 +317,18 @@ s = prs.slides.add_slide(BLANK); bg(s, INK)
 text(s, Inches(0.6), Inches(0.8), Inches(12), Inches(0.9), "What we built", size=40, bold=True, font=HEAD, color=PAPER)
 bullets(s, Inches(0.6), Inches(2.0), Inches(7.2), Inches(4.5), [
     "A working end-to-end prototype: upload, classify, extract, show",
-    "Three models fused: fine-tuned CNN, zero-shot CLIP, OCR text classifier",
+    "Three models in an early-exit cascade: fine-tuned CNN, zero-shot CLIP, OCR text classifier",
     "Handles images, phone photos and multi-page PDFs, rejects everything else",
     "Every accuracy number on these slides was measured on held-out data",
-], size=18, color=RGBColor(0xDD, 0xE3, 0xEE))
+], size=18, color=ON_DARK)
 text(s, Inches(8.4), Inches(2.0), Inches(4.3), Inches(0.5), "Next steps", size=22, bold=True, font=HEAD, color=PAPER)
 bullets(s, Inches(8.4), Inches(2.6), Inches(4.3), Inches(4), [
     "Train on real university documents",
     "Tampering and forgery detection",
     "Cross-document consistency checks",
     "Verification against issuer records",
-], size=16, color=RGBColor(0xDD, 0xE3, 0xEE))
-text(s, Inches(0.6), Inches(6.6), Inches(12), Inches(0.5), "Thank you", size=20, italic=True, font=HEAD, color=RGBColor(0xB8, 0xC1, 0xCF))
+], size=16, color=ON_DARK)
+text(s, Inches(0.6), Inches(6.6), Inches(12), Inches(0.5), "Thank you", size=20, italic=True, font=HEAD, color=ON_DARK_MUTED)
 
 prs.save(OUT)
 print("saved", OUT, len(prs.slides), "slides")

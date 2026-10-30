@@ -80,3 +80,30 @@ def test_sample_listing_and_traversal_guard():
     names = [s["name"] for s in client.get("/api/samples").json()]
     assert "01_certificate_course_completion.png" in names
     assert client.get("/api/samples/../backend/app.py").status_code == 404
+
+
+# ---- early-exit cascade: one model answers, the result names it, later models never run ----
+
+def test_single_model_decision():
+    d = post("01_certificate_course_completion.png").json()
+    dec = d["classification"]["decision"]
+    assert dec["model"] in ("image", "clip", "text")
+    assert dec["accepted"] is True
+    assert "image_probabilities" not in d["classification"]  # no side-by-side model outputs
+    assert dec["models_run"][-1] == dec["model"]  # it stopped at the model that answered
+
+
+def test_cnn_answers_synthetic_and_stops():
+    dec = post("05_other_invoice.png").json()["classification"]["decision"]
+    assert dec["model"] == "image" and dec["models_run"] == ["image"]
+    assert dec["models_skipped"] == ["clip", "text"]
+
+
+def test_real_scan_falls_through_to_clip():
+    dec = post("real_world/real_03_phd_diploma_marquette.jpg").json()["classification"]["decision"]
+    assert dec["model"] == "clip" and dec["models_run"] == ["image", "clip"]
+
+
+def test_rejected_photo_skips_ocr():
+    d = post("07_random_photo.jpg").json()
+    assert d["timings_ms"]["ocr"] == 0

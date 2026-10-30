@@ -27,12 +27,8 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-        serif: ['"Instrument Serif"', '"Newsreader"', '"Cormorant Garamond"', 'Georgia', 'serif'],
-        display: ['"Instrument Serif"', 'Georgia', 'serif'],
-        editorial: ['"Newsreader"', 'Georgia', 'serif'],
-        vogue: ['"Cormorant Garamond"', 'Georgia', 'serif'],
-        warm: ['"Fraunces"', 'Georgia', 'serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        serif: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],
       },
       letterSpacing: {

@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ShieldX, RotateCcw, ScanText, FileText, Layers, Clock } from 'lucide-react';
+import { ShieldCheck, ShieldX, RotateCcw, ScanText, FileText, Layers, Clock, Zap, ArrowRight } from 'lucide-react';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
-import { AnalysisResult, CLASS_NAMES, DOC_CLASSES, DocClass } from '../lib/api';
+import { AnalysisResult, CLASS_NAMES, DOC_CLASSES, DocClass, ModelKey } from '../lib/api';
 
 interface AnalysisResultPageProps {
   result: AnalysisResult | null;
   onAnalyzeAnother: () => void;
+  onLearn: (screen: string) => void;
 }
+
+const MODEL_SHORT: Record<ModelKey, string> = { image: 'EfficientNet-B0', clip: 'CLIP', text: 'Text model' };
+const MODEL_PAGE: Record<ModelKey, string> = { image: 'learn-cnn', clip: 'learn-clip', text: 'learn-text' };
 
 const TIMING_LABELS: Record<string, string> = {
   decode: 'File decoding',
   ocr: 'OCR',
-  classification: 'Classification (3 models)',
+  classification: 'Classification (one model)',
   field_extraction: 'Field extraction',
   total: 'Total',
 };
@@ -48,7 +52,7 @@ const ProbBars: React.FC<{ title: string; probs: Record<DocClass, number> | null
   </div>
 );
 
-export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, onAnalyzeAnother }) => {
+export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, onAnalyzeAnother, onLearn }) => {
   const [showBoxes, setShowBoxes] = useState(true);
   const [showText, setShowText] = useState(false);
 
@@ -63,6 +67,7 @@ export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, 
 
   const { verdict, classification: cls, preview } = result;
   const good = verdict.is_relevant;
+  const dec = cls.decision;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -72,7 +77,7 @@ export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, 
             <span className="h-2 w-2 rounded-full bg-zinc-900" />
             <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Step 3 of 3: Result</span>
           </div>
-          <h1 className="font-serif text-3xl md:text-4xl font-normal tracking-tight text-zinc-950">Analysis Result</h1>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-zinc-950">Analysis result</h1>
           <p className="text-xs text-zinc-500 break-all">
             {result.document_name} | {result.file_type} | {result.page_count} page{result.page_count > 1 ? 's' : ''}
           </p>
@@ -87,7 +92,7 @@ export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, 
         </div>
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-serif text-2xl text-zinc-950">{cls.label}</span>
+            <span className="text-2xl font-semibold text-zinc-950">{cls.label}</span>
             <Badge variant={good ? 'genuine' : 'danger'}>{good ? 'Relevant credential' : 'Not relevant'}</Badge>
             <Badge variant="neutral" size="sm">{pct(cls.confidence)} confidence</Badge>
           </div>
@@ -156,16 +161,32 @@ export const AnalysisResultPage: React.FC<AnalysisResultPageProps> = ({ result, 
         </div>
 
         <div className="space-y-6 min-w-0">
-          {/* Classification breakdown */}
-          <div className="depth-card-static rounded-3xl p-5 space-y-5">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+          {/* Classification: ONE model's answer, the one the cascade accepted */}
+          <div className="depth-card-static rounded-3xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3 gap-2">
               <span className="text-xs font-semibold text-zinc-900">Classification</span>
-              <Badge variant="neural" size="sm">{cls.fusion_mode.split('+').length} models fused</Badge>
+              <Badge variant="neural" size="sm">Answered by one model</Badge>
             </div>
-            <ProbBars title="Final (fused)" probs={cls.class_probabilities} winner={cls.document_type} />
-            <ProbBars title="Image model (fine-tuned)" probs={cls.image_probabilities} winner={cls.document_type} note="EfficientNet-B0" />
-            <ProbBars title="Vision-language model (zero-shot)" probs={cls.clip_probabilities} winner={cls.document_type} note="CLIP ViT-B/32" />
-            <ProbBars title="Text model (OCR)" probs={cls.text_probabilities} winner={cls.document_type} note="TF-IDF + LogReg" />
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 shrink-0 rounded-xl bg-zinc-900 text-white flex items-center justify-center"><Zap className="h-5 w-5" /></div>
+              <div className="min-w-0 space-y-0.5">
+                <div className="text-sm font-semibold text-zinc-950">{dec.model_name}</div>
+                <div className="text-xs text-zinc-600">
+                  {pct(cls.confidence)} confident in {dec.latency_ms.toFixed(0)} ms
+                  {dec.accepted ? `, cleared its ${pct(dec.threshold)} threshold` : ', no model cleared its threshold, so this is the most confident answer'}
+                </div>
+                <div className="text-[11px] text-zinc-500">
+                  {dec.models_skipped.length
+                    ? `${dec.models_skipped.map((m) => MODEL_SHORT[m]).join(' and ')} never ran: an earlier model was already confident.`
+                    : 'All three models were tried before one answered.'}
+                </div>
+              </div>
+            </div>
+            <ProbBars title={`${MODEL_SHORT[dec.model]} class probabilities`} probs={cls.class_probabilities} winner={cls.document_type} />
+            <button type="button" onClick={() => onLearn(MODEL_PAGE[dec.model])}
+              className="flex items-center gap-1.5 text-xs font-medium text-zinc-900 hover:underline cursor-pointer">
+              How {MODEL_SHORT[dec.model]} works <ArrowRight className="h-3.5 w-3.5" />
+            </button>
           </div>
 
           {/* Extracted fields */}

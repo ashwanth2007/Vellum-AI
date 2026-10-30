@@ -219,6 +219,20 @@ HEADLINES = {
 }
 
 
+class _LazyOCR:
+    """OCR one page on first use, then reuse the result. OCR costs seconds, classification milliseconds."""
+
+    def __init__(self, img):
+        self.img, self.result, self.ms = img, None, 0
+
+    def get(self):
+        if self.result is None:
+            t = time.perf_counter()
+            self.result = ocr_service.extract_text_and_layout(self.img)
+            self.ms = round((time.perf_counter() - t) * 1000)
+        return self.result
+
+
 DEMO_DIR = BASE_DIR / "demo_samples"
 
 
@@ -254,20 +268,22 @@ async def analyze(file: UploadFile = File(...)):
     mime, total_pages, pages = _load_pages(data)
     timings = {"decode": round((time.perf_counter() - t0) * 1000)}
 
+    # OCR is slow (seconds), so it runs lazily: only when the text model is reached in the
+    # cascade, or when a relevant document needs its fields read. A rejected photo never pays for it.
     page_results = []
     for i, img in enumerate(pages):
-        t = time.perf_counter()
-        ocr = ocr_service.extract_text_and_layout(img)
-        t_ocr = time.perf_counter()
-        cls = doc_module.predict(img, ocr_text=ocr["full_text"])
-        t_cls = time.perf_counter()
-        page_results.append({"img": img, "ocr": ocr, "cls": cls})
+        lazy = _LazyOCR(img)
+        cls = doc_module.classify_cascade(img, lambda o=lazy: o.get()["full_text"])
+        if cls["is_relevant"]:
+            lazy.get()
+        page_results.append({"img": img, "lazy": lazy, "ocr": lazy.result, "cls": cls})
         if i == 0:
-            timings["ocr"] = round((t_ocr - t) * 1000)
-            timings["classification"] = round((t_cls - t_ocr) * 1000)
+            timings["classification"] = round(cls["decision"]["decision_ms"])
+    timings["ocr"] = sum(pr["lazy"].ms for pr in page_results)
 
     first = page_results[0]
-    cls, ocr = first["cls"], first["ocr"]
+    cls = first["cls"]
+    ocr = first["ocr"] or {"engine": "not run (not needed)", "word_count": 0, "average_confidence": 0.0, "full_text": "", "lines": []}
     t = time.perf_counter()
     if cls["is_relevant"]:
         extraction = field_extractor.extract(ocr["lines"], cls["document_type"])
@@ -313,6 +329,63 @@ async def analyze(file: UploadFile = File(...)):
     }
 
 
+def _png(arr: np.ndarray, size: Optional[int] = None, scale: bool = True) -> str:
+    """2-D array -> grayscale PNG data URL, min-max scaled unless it is already 0-255 pixels."""
+    a = arr.astype(np.float32)
+    a = (a - a.min()) / (a.max() - a.min() + 1e-8) if scale else a / 255.0
+    im = Image.fromarray((a * 255).astype(np.uint8), "L")
+    if size:
+        im = im.resize((size, size), Image.NEAREST)
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+@app.post("/api/explain/cnn")
+async def explain_cnn(file: UploadFile = File(...)):
+    """Run one page through the real EfficientNet-B0 and return what each stage actually produced."""
+    import torch
+    import importlib
+    P = importlib.import_module("ml.document_classifier.predict")  # the package re-exports a function named predict
+    from ml.document_classifier.data import letterbox, MEAN, STD
+
+    _, _, pages = _load_pages(await file.read())
+    img = letterbox(pages[0], P.INPUT_SIZE)
+    model = P.get_model()
+    x = P._tf(pages[0]).unsqueeze(0).to(P._device)
+
+    acts = {}
+    hooks = [blk.register_forward_hook(lambda _m, _i, out, k=i: acts.__setitem__(k, out.detach()))
+             for i, blk in enumerate(model.features)]
+    with torch.no_grad():
+        logits, embed = model(x)
+        pooled = model.pool(acts[len(model.features) - 1]).flatten(1)
+    for h in hooks:
+        h.remove()
+
+    rgb = np.array(img)
+    stages = []
+    for i in range(len(model.features)):
+        a = acts[i][0].float().cpu().numpy()  # C x H x W
+        top = np.argsort(a.mean(axis=(1, 2)))[::-1][:6]  # the six channels that fired most on this page
+        stages.append({"index": i, "shape": list(a.shape),
+                       "params": sum(p.numel() for p in model.features[i].parameters()),
+                       "maps": [{"channel": int(c), "image": _png(a[c], 96)} for c in top]})
+    probs = torch.softmax(logits.float(), 1)[0].cpu().numpy()
+    pv = pooled[0].float().cpu().numpy()
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=85)
+    return {
+        "input": {"image": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode(),
+                  "size": P.INPUT_SIZE, "mean": MEAN, "std": STD,
+                  "channels": [_png(rgb[:, :, c], scale=False) for c in range(3)]},
+        "stages": stages,
+        "pooled": {"length": int(pv.size), "top": [{"index": int(j), "value": round(float(pv[j]), 3)} for j in np.argsort(pv)[::-1][:12]]},
+        "embedding_length": int(embed.shape[1]),
+        "probabilities": {c: round(float(probs[k]), 4) for k, c in enumerate(P.DOCUMENT_CLASSES)},
+    }
+
+
 @app.post("/api/verify/cross-document")
 def verify_cross_document(payload: Dict[str, Any]):
     """
@@ -349,6 +422,14 @@ def analyze_lor_endpoint(payload: Dict[str, Any]):
         raise HTTPException(status_code=400, detail="Text field cannot be empty.")
     ref_prof = payload.get("reference_profile")
     return lor_analyzer.analyze_lor(text, reference_profile=ref_prof)
+
+
+# Hosted build (Hugging Face Space): the built React app is served from the same origin as the API.
+# Mounted last so every /api route above takes precedence. In local dev Vite serves the frontend instead.
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
+if FRONTEND_DIST.is_dir():
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
 
 
 if __name__ == "__main__":

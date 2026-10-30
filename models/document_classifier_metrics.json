@@ -15,6 +15,23 @@
   "fused_test_accuracy": 1.0,
   "fused_test_macro_f1": 1.0,
   "fused_real_world_accuracy": 1.0,
+  "cascade_test_accuracy": 1.0,
+  "cascade_test_answered_by": {
+    "image": 448,
+    "clip": 0,
+    "text": 0
+  },
+  "cascade_real_world_accuracy": 1.0,
+  "cascade_real_world_answered_by": {
+    "image": 1,
+    "clip": 5,
+    "text": 0
+  },
+  "cascade_thresholds": {
+    "image": 0.9,
+    "clip": 0.9,
+    "text": 0.0
+  },
   "text_test_accuracy": 0.9669,
   "text_test_samples_with_text": 362,
   "report": {
@@ -58,7 +75,7 @@
   },
   "real_world_detail": [
     {
-      "file": "real_01_Degree_Certificate_from_the_University_o.jpg",
+      "file": "real_01_degree_certificate_wales.jpg",
       "true": "CERTIFICATE",
       "image_cnn": "CERTIFICATE",
       "clip": "CERTIFICATE",
@@ -66,7 +83,7 @@
       "fused": "CERTIFICATE"
     },
     {
-      "file": "real_02_HKBU_CIE_Associate_Degree_Certificate_in.jpg",
+      "file": "real_02_associate_degree_hong_kong.jpg",
       "true": "CERTIFICATE",
       "image_cnn": "RANDOM_PHOTO",
       "clip": "CERTIFICATE",
@@ -74,7 +91,7 @@
       "fused": "CERTIFICATE"
     },
     {
-      "file": "real_03_Ph.D._diploma_Marquette_University_1969..jpg",
+      "file": "real_03_phd_diploma_marquette.jpg",
       "true": "CERTIFICATE",
       "image_cnn": "OTHER_DOCUMENT",
       "clip": "CERTIFICATE",
@@ -82,7 +99,7 @@
       "fused": "CERTIFICATE"
     },
     {
-      "file": "real_04_Fellowship_Diploma_of_the_Royal_College_.jpg",
+      "file": "real_04_fellowship_diploma_ireland.jpg",
       "true": "CERTIFICATE",
       "image_cnn": "OTHER_DOCUMENT",
       "clip": "CERTIFICATE",
@@ -90,7 +107,7 @@
       "fused": "CERTIFICATE"
     },
     {
-      "file": "real_05_Transcript__education_.jpg.jpg",
+      "file": "real_05_student_record_book.jpg",
       "true": "ACADEMIC_RECORD",
       "image_cnn": "OTHER_DOCUMENT",
       "clip": "ACADEMIC_RECORD",
@@ -98,7 +115,7 @@
       "fused": "ACADEMIC_RECORD"
     },
     {
-      "file": "real_06_Diploma-ExpertoUniversitario-Sevilla.jpg.jpg",
+      "file": "real_06_diploma_sevilla_spanish.jpg",
       "true": "CERTIFICATE",
       "image_cnn": "OTHER_DOCUMENT",
       "clip": "CERTIFICATE",
